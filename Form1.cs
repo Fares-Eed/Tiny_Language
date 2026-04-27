@@ -1,9 +1,12 @@
-﻿using System.Data;
+﻿using System;
+using System.Collections.Generic;
+using System.Data;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace Tiny_Language
 {
+
     public partial class Form1 : Form
     {
         public Form1()
@@ -26,8 +29,8 @@ namespace Tiny_Language
                 return;
             }
 
-            // ── 1. TOKEN PATTERNS (order matters — longest/specific first) ──────
-            string comment = @"/\*[^*]*\*+([^/*][^*]*\*+)*/";
+            // ── 1. TOKEN PATTERNS ──────
+            string comment = @"/\*.*?\*/";
             string strLit = @"""[^""]*""";
             string keywords = @"\b(int|float|string|read|write|repeat|until|if|elseif|else|then|return|endl|main)\b";
             string boolOp = @"&&|\|\|";
@@ -38,17 +41,18 @@ namespace Tiny_Language
             string singleOp = @"[+\-*/=<>]";
             string symbols = @"[;{}\(\),]";
 
-            // Master pattern — order determines priority
+            // Master pattern
             string masterPattern = $"{comment}|{strLit}|{keywords}|{boolOp}|{condOp}|{assignOp}|{number}|{identifier}|{singleOp}|{symbols}";
 
             // ── 2. EXTRACT ALL LEXEMES IN ONE PASS ───────────────────────────────
-            MatchCollection matches = Regex.Matches(inputString, masterPattern);
+            MatchCollection matches = Regex.Matches(inputString, masterPattern, RegexOptions.Singleline);
 
-            // ── 3. PREPARE RESULTS TABLE ─────────────────────────────────────────
+            // ── 3. PREPARE RESULTS TABLE & TOKEN LIST ────────────────────────────
             DataTable dt = new DataTable();
             dt.Columns.Add("Lexeme");
             dt.Columns.Add("Token Type");
 
+            List<Token> allTokens = new List<Token>();
             int tokenCount = 0;
 
             foreach (Match m in matches)
@@ -56,15 +60,33 @@ namespace Tiny_Language
                 string lex = m.Value;
                 string type = ClassifyToken(lex, keywords, number, strLit, comment,
                                             boolOp, condOp, assignOp, singleOp);
+
                 dt.Rows.Add(lex, type);
                 tokenCount++;
+
+                if (type != "Comment")
+                {
+                    allTokens.Add(new Token { Value = lex, Type = type });
+                }
             }
 
             // ── 4. BIND TO DATAGRIDVIEW ───────────────────────────────────────────
             table.DataSource = dt;
 
-            // Optional: show token count
-            // label1.Text = "Total Tokens: " + tokenCount;
+            // ── 5. RUN THE SYNTAX PARSER ──────────────────────────────────────────
+            try
+            {
+                if (allTokens.Count == 0) return;
+
+                TinyPLParser parser = new TinyPLParser(allTokens);
+                parser.ParseProgram();
+
+                MessageBox.Show("Success: Your Tiny PL code is correct!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Syntax Error:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         // ── TOKEN CLASSIFIER ────────────────────────────────────────────────────
@@ -123,7 +145,6 @@ namespace Tiny_Language
                 return "Identifier";
 
             return "Unknown";
-        
-    }
+        }
     }
 }
